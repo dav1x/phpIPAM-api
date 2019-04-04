@@ -16,8 +16,8 @@
 # include needed functions
 include_once '../config.php';
 include_once '../functions/functions.php';
+include_once '../functions/classes/class.Addresses.php';
 include_once 'tokenValid.php';
-
 # Set up variables and change subnet to long
 $snet = ip2long($_REQUEST['subnet']);
 $desc = $_REQUEST['desc'];
@@ -49,7 +49,7 @@ if ($data->connect_errno) {
 }
 
 # Check for existing hostname entry in IPAM
-$host_query = $data->prepare("select `ip_addr` from `ipaddresses` where `dns_name` = ?");
+$host_query = $data->prepare("select `ip_addr` from `ipaddresses` where `hostname` = ?");
 $host_query->bind_param('s', $_REQUEST['host']);
 $host_query->execute();
 $host_query->bind_result($exist);
@@ -76,21 +76,23 @@ if (empty($subnetId)) {
 }
 
 # Get the first free IP in specified subnet
-$first = getFirstAvailableIPAddress ($subnetId);
+$Database	= new Database_PDO;
+$Addresses  = new Addresses ($Database);
+$Subnets 	= new Subnets ($Database);
 
-# Convert IP to long
-$firstfree = transform2long($first);
+$first = $Subnets->transform_to_dotted($Addresses->get_first_available_address ($subnetId, $Subnets)); 
+$firstfree = ip2long($first);
 
 # Build query to insert new host in DB
 $query = <<< EOQ
-INSERT INTO `ipaddresses` (`subnetId`,`description`,`ip_addr`,`dns_name`,`mac`,`owner`,`state`,
+INSERT INTO `ipaddresses` (`subnetId`,`description`,`ip_addr`,`hostname`,`mac`,`owner`,`state`,
 `switch`,`port`,`note`,`excludePing`) VALUES
-('$subnetId','$desc','$first','$host','','$owner','1','','','','0');
+('$subnetId','$desc','$firstfree','$host','','$owner','1','','','','0');
 EOQ;
 
 try {
-  $id = $database->query( $query, true );
-  print $firstfree;
+  $id = $data->query( $query, true );
+  print $first;
 }
 catch (Exception $e) {
   print "Error: There was a problem adding $host to IPAM, please contact the administrator.\n";
